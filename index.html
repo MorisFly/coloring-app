@@ -142,33 +142,19 @@
       height: 90vw;
       max-width: 500px;
       max-height: 500px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ffffff;
     }
 
-    /* Холст снизу принимает все касания пальца напрямую */
     canvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 1;
-      cursor: crosshair;
-    }
-
-    /* Черный контур строго поверх холста, касания сквозь него идут на холст */
-    #svgWrapper {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 2;
-    }
-
-    #svgWrapper svg {
-      width: 100%;
-      height: 100%;
+      cursor: pointer;
     }
 
     /* Панель инструментов */
@@ -200,16 +186,13 @@
       box-shadow: 0 0 12px var(--glow-color);
     }
 
-    .tool-btn {
+    .tool-info {
       background: var(--border-color);
-      border: none;
       color: var(--text-color);
-      padding: 6px 10px;
+      padding: 6px 12px;
       border-radius: 8px;
-      cursor: pointer;
       font-size: 13px;
       font-weight: 600;
-      flex-shrink: 0;
     }
   </style>
 </head>
@@ -235,19 +218,18 @@
     <div id="canvasContainer">
       <div class="drawing-box" id="drawingBox">
         <canvas id="paintCanvas"></canvas>
-        <div id="svgWrapper"></div>
       </div>
     </div>
 
     <div id="toolbar">
-      <button class="tool-btn" id="brushSizeBtn">Кисть: ср.</button>
+      <div class="tool-info">Режим: Заливка по тапу</div>
       <div class="color-btn active" style="background: #ff003c; --glow-color: rgba(255,0,60,0.6);" data-color="#ff003c"></div>
       <div class="color-btn" style="background: #a855f7; --glow-color: rgba(168,85,247,0.6);" data-color="#a855f7"></div>
       <div class="color-btn" style="background: #3b82f6; --glow-color: rgba(59,130,246,0.6);" data-color="#3b82f6"></div>
       <div class="color-btn" style="background: #06b6d4; --glow-color: rgba(6,182,212,0.6);" data-color="#06b6d4"></div>
       <div class="color-btn" style="background: #10b981; --glow-color: rgba(16,185,129,0.6);" data-color="#10b981"></div>
       <div class="color-btn" style="background: #f59e0b; --glow-color: rgba(245,158,11,0.6);" data-color="#f59e0b"></div>
-      <div class="color-btn" style="background: #ffffff; border: 2px solid #ccc; --glow-color: rgba(255,255,255,0.6);" data-color="#ffffff" title="Ластик"></div>
+      <div class="color-btn" style="background: #ffffff; border: 2px solid #ccc; --glow-color: rgba(255,255,255,0.6);" data-color="#ffffff" title="Ластик/Белый"></div>
     </div>
   </div>
 
@@ -257,6 +239,7 @@
         id: 'complex-mandala',
         title: 'Сложная Мандала',
         svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <rect width="400" height="400" fill="#ffffff"/>
           <g fill="none" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="200" cy="200" r="180"/>
             <circle cx="200" cy="200" r="150"/>
@@ -282,6 +265,7 @@
         id: 'floral-zen',
         title: 'Цветочный Дзен',
         svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <rect width="400" height="400" fill="#ffffff"/>
           <g fill="none" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <rect x="40" y="40" width="320" height="320" rx="40"/>
             <circle cx="200" cy="200" r="140"/>
@@ -296,6 +280,7 @@
         id: 'cosmic-mandala',
         title: 'Космическая Мандала',
         svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <rect width="400" height="400" fill="#ffffff"/>
           <g fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="200" cy="200" r="185"/>
             <circle cx="200" cy="200" r="160"/>
@@ -319,6 +304,7 @@
         id: 'floral-labyrinth',
         title: 'Цветочный Лабиринт',
         svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <rect width="400" height="400" fill="#ffffff"/>
           <g fill="none" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <rect x="30" y="30" width="340" height="340" rx="60"/>
             <rect x="70" y="70" width="260" height="260" rx="40"/>
@@ -342,17 +328,12 @@
 
     let currentColor = '#ff003c';
     let currentImageId = null;
-    let baseLineWidth = 16;
-    let isDrawing = false;
-    let lastX = 0;
-    let lastY = 0;
 
     const canvas = document.getElementById('paintCanvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const galleryScreen = document.getElementById('gallery-screen');
     const coloringScreen = document.getElementById('coloring-screen');
     const galleryGrid = document.getElementById('galleryGrid');
-    const svgWrapper = document.getElementById('svgWrapper');
 
     // Заполнение галереи
     images.forEach(img => {
@@ -370,111 +351,118 @@
       galleryGrid.appendChild(card);
     });
 
-    function resizeCanvas() {
-      if (!coloringScreen.classList.contains('active')) return;
-      const box = document.getElementById('drawingBox');
-      const rect = box.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      
-      let tempCanvas = document.createElement('canvas');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      let tempCtx = tempCanvas.getContext('2d');
-      tempCtx.drawImage(canvas, 0, 0);
-
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      
-      ctx.scale(dpr, dpr);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width / dpr, tempCanvas.height / dpr);
-    }
-    window.addEventListener('resize', resizeCanvas);
-
     function openImage(id) {
       currentImageId = id;
       const imgData = images.find(i => i.id === id);
-      svgWrapper.innerHTML = imgData.svg;
 
       galleryScreen.classList.remove('active');
       coloringScreen.classList.add('active');
 
-      setTimeout(() => {
-        resizeCanvas();
+      // Рендерим SVG в картинку и выводим на холст
+      const blob = new Blob([imgData.svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const box = document.getElementById('drawingBox');
+        const rect = box.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+        URL.revokeObjectURL(url);
         loadProgress(id);
-      }, 50);
+      };
+      img.src = url;
     }
 
-    function getCoords(e) {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      };
+    // Алгоритм заливки (Flood Fill / Заливка области)
+    function hexToRgb(hex) {
+      let bigint = parseInt(hex.replace('#', ''), 16);
+      return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+    }
+
+    function floodFill(startX, startY, fillColorHex) {
+      const dpr = window.devicePixelRatio || 1;
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+      const imgData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+      const data = imgData.data;
+
+      const sx = Math.floor(startX * dpr);
+      const sy = Math.floor(startY * dpr);
+
+      if (sx < 0 || sx >= canvasWidth || sy < 0 || sy >= canvasHeight) return;
+
+      const idx = (sy * canvasWidth + sx) * 4;
+      const startR = data[idx];
+      const startG = data[idx + 1];
+      const startB = data[idx + 2];
+
+      const [fillR, fillG, fillB] = hexToRgb(fillColorHex);
+
+      // Не заливать, если цвет уже совпадает или если кликнули на черный контур
+      if (Math.abs(startR - fillR) < 5 && Math.abs(startG - fillG) < 5 && Math.abs(startB - fillB) < 5) return;
+      if (startR < 50 && startG < 50 && startB < 50) return; // Кликнули по черной линии
+
+      const queue = [[sx, sy]];
+      const visited = new Uint8Array(canvasWidth * canvasHeight);
+
+      while (queue.length > 0) {
+        let [x, y] = queue.pop();
+        let pixelIndex = (y * canvasWidth + x);
+        if (visited[pixelIndex]) continue;
+
+        let dataIndex = pixelIndex * 4;
+        let r = data[dataIndex];
+        let g = data[dataIndex + 1];
+        let b = data[dataIndex + 2];
+
+        // Проверяем схожесть цвета и то, что не уперлись в черный контур
+        if (Math.abs(r - startR) > 30 || Math.abs(g - startG) > 30 || Math.abs(b - startB) > 30) continue;
+        if (r < 50 && g < 50 && b < 50) continue;
+
+        visited[pixelIndex] = 1;
+
+        data[dataIndex] = fillR;
+        data[dataIndex + 1] = fillG;
+        data[dataIndex + 2] = fillB;
+        data[dataIndex + 3] = 255;
+
+        if (x > 0) queue.push([x - 1, y]);
+        if (x < canvasWidth - 1) queue.push([x + 1, y]);
+        if (y > 0) queue.push([x, y - 1]);
+        if (y < canvasHeight - 1) queue.push([x, y + 1]);
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      saveProgress();
     }
 
     canvas.addEventListener('pointerdown', (e) => {
-      isDrawing = true;
-      const coords = getCoords(e);
-      lastX = coords.x;
-      lastY = coords.y;
-
-      ctx.beginPath();
-      ctx.arc(lastX, lastY, baseLineWidth / 2, 0, Math.PI * 2);
-      ctx.fillStyle = currentColor;
-      ctx.fill();
-      saveProgress();
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      floodFill(x, y, currentColor);
     });
-
-    canvas.addEventListener('pointermove', (e) => {
-      if (!isDrawing) return;
-      e.preventDefault();
-
-      const coords = getCoords(e);
-      let pressure = e.pressure;
-      if (pressure === 0 || pressure === undefined) pressure = 0.5;
-
-      ctx.beginPath();
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(coords.x, coords.y);
-
-      ctx.strokeStyle = currentColor;
-      ctx.lineWidth = baseLineWidth * (pressure * 2);
-      ctx.stroke();
-
-      lastX = coords.x;
-      lastY = coords.y;
-    });
-
-    const stopDrawing = () => {
-      if (isDrawing) {
-        isDrawing = false;
-        saveProgress();
-      }
-    };
-    canvas.addEventListener('pointerup', stopDrawing);
-    canvas.addEventListener('pointerout', stopDrawing);
-    canvas.addEventListener('pointercancel', stopDrawing);
 
     function saveProgress() {
       if (!currentImageId) return;
       const dataURL = canvas.toDataURL();
-      localStorage.setItem('incolor_paint_' + currentImageId, dataURL);
+      localStorage.setItem('incolor_fill_' + currentImageId, dataURL);
     }
 
     function loadProgress(id) {
-      const savedData = localStorage.getItem('incolor_paint_' + id);
+      const savedData = localStorage.getItem('incolor_fill_' + id);
       if (savedData) {
         let img = new Image();
         img.src = savedData;
         img.onload = () => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
+          const rect = document.getElementById('drawingBox').getBoundingClientRect();
+          ctx.drawImage(img, 0, 0, rect.width, rect.height);
         };
-      } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     }
 
@@ -486,21 +474,8 @@
 
     document.getElementById('resetBtn').addEventListener('click', () => {
       if(confirm('Очистить рисунок и начать заново?')) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        localStorage.removeItem('incolor_paint_' + currentImageId);
-      }
-    });
-
-    document.getElementById('brushSizeBtn').addEventListener('click', () => {
-      if (baseLineWidth === 16) {
-        baseLineWidth = 30;
-        document.getElementById('brushSizeBtn').textContent = 'Кисть: толстая';
-      } else if (baseLineWidth === 30) {
-        baseLineWidth = 8;
-        document.getElementById('brushSizeBtn').textContent = 'Кисть: тонкая';
-      } else {
-        baseLineWidth = 16;
-        document.getElementById('brushSizeBtn').textContent = 'Кисть: ср.';
+        localStorage.removeItem('incolor_fill_' + currentImageId);
+        openImage(currentImageId);
       }
     });
 
