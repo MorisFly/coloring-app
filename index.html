@@ -2,7 +2,7 @@
 <html lang="ru" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
@@ -35,6 +35,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       -webkit-tap-highlight-color: transparent;
       overflow: hidden;
+      touch-action: none;
       transition: background-color 0.3s, color 0.3s;
     }
 
@@ -52,6 +53,7 @@
     #gallery-screen {
       padding: 20px;
       overflow-y: auto;
+      touch-action: pan-y;
     }
     
     .gallery-header {
@@ -155,6 +157,7 @@
       width: 100%;
       height: 100%;
       cursor: crosshair;
+      touch-action: none;
     }
 
     /* Панель инструментов */
@@ -379,7 +382,6 @@
         canvas.height = rect.height * dpr;
         ctx.scale(dpr, dpr);
 
-        // Рисуем чистый контур
         ctx.drawImage(img, 0, 0, rect.width, rect.height);
         URL.revokeObjectURL(url);
         loadProgress(id);
@@ -395,23 +397,12 @@
       };
     }
 
-    // Проверка: не попадает ли палец на черный контур (чтобы кисть не закрашивала черные линии)
-    function isOverBlackLine(x, y) {
-      const dpr = window.devicePixelRatio || 1;
-      const p = ctx.getImageData(Math.floor(x * dpr), Math.floor(y * dpr), 1, 1).data;
-      // Черный цвет линий (R, G, B близки к 0)
-      return p[0] < 50 && p[1] < 50 && p[2] < 50;
-    }
-
     canvas.addEventListener('pointerdown', (e) => {
-      const coords = getCoords(e);
-      if (isOverBlackLine(coords.x, coords.y) && currentColor !== '#ffffff') return; // Не начинаем рисовать прямо по черному контуру
-
       isDrawing = true;
+      const coords = getCoords(e);
       lastX = coords.x;
       lastY = coords.y;
 
-      // Используем destination-over: краска ложится ПОД черные линии контура
       ctx.globalCompositeOperation = 'destination-over';
 
       ctx.beginPath();
