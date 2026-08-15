@@ -154,7 +154,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      cursor: pointer;
+      cursor: crosshair;
     }
 
     /* Панель инструментов */
@@ -186,13 +186,16 @@
       box-shadow: 0 0 12px var(--glow-color);
     }
 
-    .tool-info {
+    .tool-btn {
       background: var(--border-color);
+      border: none;
       color: var(--text-color);
-      padding: 6px 12px;
+      padding: 6px 10px;
       border-radius: 8px;
+      cursor: pointer;
       font-size: 13px;
       font-weight: 600;
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -222,14 +225,14 @@
     </div>
 
     <div id="toolbar">
-      <div class="tool-info">Режим: Заливка по тапу</div>
+      <button class="tool-btn" id="brushSizeBtn">Кисть: ср.</button>
       <div class="color-btn active" style="background: #ff003c; --glow-color: rgba(255,0,60,0.6);" data-color="#ff003c"></div>
       <div class="color-btn" style="background: #a855f7; --glow-color: rgba(168,85,247,0.6);" data-color="#a855f7"></div>
       <div class="color-btn" style="background: #3b82f6; --glow-color: rgba(59,130,246,0.6);" data-color="#3b82f6"></div>
       <div class="color-btn" style="background: #06b6d4; --glow-color: rgba(6,182,212,0.6);" data-color="#06b6d4"></div>
       <div class="color-btn" style="background: #10b981; --glow-color: rgba(16,185,129,0.6);" data-color="#10b981"></div>
       <div class="color-btn" style="background: #f59e0b; --glow-color: rgba(245,158,11,0.6);" data-color="#f59e0b"></div>
-      <div class="color-btn" style="background: #ffffff; border: 2px solid #ccc; --glow-color: rgba(255,255,255,0.6);" data-color="#ffffff" title="Ластик/Белый"></div>
+      <div class="color-btn" style="background: #ffffff; border: 2px solid #ccc; --glow-color: rgba(255,255,255,0.6);" data-color="#ffffff" title="Ластик"></div>
     </div>
   </div>
 
@@ -328,6 +331,11 @@
 
     let currentColor = '#ff003c';
     let currentImageId = null;
+    let baseLineWidth = 20;
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+    let originalSvgImage = null;
 
     const canvas = document.getElementById('paintCanvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -358,11 +366,11 @@
       galleryScreen.classList.remove('active');
       coloringScreen.classList.add('active');
 
-      // Рендерим SVG в картинку и выводим на холст
       const blob = new Blob([imgData.svg], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const img = new Image();
       img.onload = () => {
+        originalSvgImage = img;
         const box = document.getElementById('drawingBox');
         const rect = box.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
@@ -371,6 +379,7 @@
         canvas.height = rect.height * dpr;
         ctx.scale(dpr, dpr);
 
+        // Рисуем чистый контур
         ctx.drawImage(img, 0, 0, rect.width, rect.height);
         URL.revokeObjectURL(url);
         loadProgress(id);
@@ -378,84 +387,80 @@
       img.src = url;
     }
 
-    // Алгоритм заливки (Flood Fill / Заливка области)
-    function hexToRgb(hex) {
-      let bigint = parseInt(hex.replace('#', ''), 16);
-      return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+    function getCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
     }
 
-    function floodFill(startX, startY, fillColorHex) {
+    // Проверка: не попадает ли палец на черный контур (чтобы кисть не закрашивала черные линии)
+    function isOverBlackLine(x, y) {
       const dpr = window.devicePixelRatio || 1;
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
-      const imgData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
-      const data = imgData.data;
-
-      const sx = Math.floor(startX * dpr);
-      const sy = Math.floor(startY * dpr);
-
-      if (sx < 0 || sx >= canvasWidth || sy < 0 || sy >= canvasHeight) return;
-
-      const idx = (sy * canvasWidth + sx) * 4;
-      const startR = data[idx];
-      const startG = data[idx + 1];
-      const startB = data[idx + 2];
-
-      const [fillR, fillG, fillB] = hexToRgb(fillColorHex);
-
-      // Не заливать, если цвет уже совпадает или если кликнули на черный контур
-      if (Math.abs(startR - fillR) < 5 && Math.abs(startG - fillG) < 5 && Math.abs(startB - fillB) < 5) return;
-      if (startR < 50 && startG < 50 && startB < 50) return; // Кликнули по черной линии
-
-      const queue = [[sx, sy]];
-      const visited = new Uint8Array(canvasWidth * canvasHeight);
-
-      while (queue.length > 0) {
-        let [x, y] = queue.pop();
-        let pixelIndex = (y * canvasWidth + x);
-        if (visited[pixelIndex]) continue;
-
-        let dataIndex = pixelIndex * 4;
-        let r = data[dataIndex];
-        let g = data[dataIndex + 1];
-        let b = data[dataIndex + 2];
-
-        // Проверяем схожесть цвета и то, что не уперлись в черный контур
-        if (Math.abs(r - startR) > 30 || Math.abs(g - startG) > 30 || Math.abs(b - startB) > 30) continue;
-        if (r < 50 && g < 50 && b < 50) continue;
-
-        visited[pixelIndex] = 1;
-
-        data[dataIndex] = fillR;
-        data[dataIndex + 1] = fillG;
-        data[dataIndex + 2] = fillB;
-        data[dataIndex + 3] = 255;
-
-        if (x > 0) queue.push([x - 1, y]);
-        if (x < canvasWidth - 1) queue.push([x + 1, y]);
-        if (y > 0) queue.push([x, y - 1]);
-        if (y < canvasHeight - 1) queue.push([x, y + 1]);
-      }
-
-      ctx.putImageData(imgData, 0, 0);
-      saveProgress();
+      const p = ctx.getImageData(Math.floor(x * dpr), Math.floor(y * dpr), 1, 1).data;
+      // Черный цвет линий (R, G, B близки к 0)
+      return p[0] < 50 && p[1] < 50 && p[2] < 50;
     }
 
     canvas.addEventListener('pointerdown', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      floodFill(x, y, currentColor);
+      const coords = getCoords(e);
+      if (isOverBlackLine(coords.x, coords.y) && currentColor !== '#ffffff') return; // Не начинаем рисовать прямо по черному контуру
+
+      isDrawing = true;
+      lastX = coords.x;
+      lastY = coords.y;
+
+      // Используем destination-over: краска ложится ПОД черные линии контура
+      ctx.globalCompositeOperation = 'destination-over';
+
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, baseLineWidth / 2, 0, Math.PI * 2);
+      ctx.fillStyle = currentColor;
+      ctx.fill();
+      saveProgress();
     });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!isDrawing) return;
+      e.preventDefault();
+
+      const coords = getCoords(e);
+      let pressure = e.pressure;
+      if (pressure === 0 || pressure === undefined) pressure = 0.5;
+
+      ctx.globalCompositeOperation = 'destination-over';
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(coords.x, coords.y);
+
+      ctx.strokeStyle = currentColor;
+      ctx.lineWidth = baseLineWidth * (pressure * 2);
+      ctx.stroke();
+
+      lastX = coords.x;
+      lastY = coords.y;
+      saveProgress();
+    });
+
+    const stopDrawing = () => {
+      if (isDrawing) {
+        isDrawing = false;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    };
+    canvas.addEventListener('pointerup', stopDrawing);
+    canvas.addEventListener('pointerout', stopDrawing);
+    canvas.addEventListener('pointercancel', stopDrawing);
 
     function saveProgress() {
       if (!currentImageId) return;
       const dataURL = canvas.toDataURL();
-      localStorage.setItem('incolor_fill_' + currentImageId, dataURL);
+      localStorage.setItem('incolor_brush_' + currentImageId, dataURL);
     }
 
     function loadProgress(id) {
-      const savedData = localStorage.getItem('incolor_fill_' + id);
+      const savedData = localStorage.getItem('incolor_brush_' + id);
       if (savedData) {
         let img = new Image();
         img.src = savedData;
@@ -474,8 +479,25 @@
 
     document.getElementById('resetBtn').addEventListener('click', () => {
       if(confirm('Очистить рисунок и начать заново?')) {
-        localStorage.removeItem('incolor_fill_' + currentImageId);
-        openImage(currentImageId);
+        localStorage.removeItem('incolor_brush_' + currentImageId);
+        const rect = document.getElementById('drawingBox').getBoundingClientRect();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (originalSvgImage) {
+          ctx.drawImage(originalSvgImage, 0, 0, rect.width, rect.height);
+        }
+      }
+    });
+
+    document.getElementById('brushSizeBtn').addEventListener('click', () => {
+      if (baseLineWidth === 20) {
+        baseLineWidth = 35;
+        document.getElementById('brushSizeBtn').textContent = 'Кисть: толстая';
+      } else if (baseLineWidth === 35) {
+        baseLineWidth = 10;
+        document.getElementById('brushSizeBtn').textContent = 'Кисть: тонкая';
+      } else {
+        baseLineWidth = 20;
+        document.getElementById('brushSizeBtn').textContent = 'Кисть: ср.';
       }
     });
 
