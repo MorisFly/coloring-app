@@ -8,13 +8,12 @@
   <link rel="manifest" href="manifest.json">
   <title>Антистресс Раскраска</title>
   <style>
-    /* Переменные тем */
     [data-theme="dark"] {
       --bg-color: #0a0a0c;
       --panel-bg: #18181b;
       --text-color: #ffffff;
       --border-color: #27272a;
-      --canvas-bg: #121215;
+      --canvas-bg: #ffffff; /* Белый фон для холста раскраски */
     }
     [data-theme="light"] {
       --bg-color: #f4f4f5;
@@ -108,7 +107,6 @@
       align-items: center;
       border-bottom: 1px solid var(--border-color);
       z-index: 10;
-      transition: background-color 0.3s;
     }
 
     .btn {
@@ -127,30 +125,43 @@
       color: #ef4444;
     }
 
-    /* Область холста для рисования кистью поверх контура */
     #canvasContainer {
       flex: 1;
       position: relative;
       background-color: var(--canvas-bg);
       overflow: hidden;
-      touch-action: none; /* Блокируем скролл страницы во время рисования кистью */
+      touch-action: none;
     }
 
+    /* Холст лежит на заднем плане (красим под контуром) */
     canvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
+      z-index: 1;
     }
 
-    #outlineSvg {
+    /* Векторный контур строго поверх холста с краской */
+    #svgWrapper {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      pointer-events: none; /* Чтобы касания проходили сквозь контур прямо на холст */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      pointer-events: none; /* Касания проходят сквозь SVG прямо на холст */
+      z-index: 2;
+    }
+
+    #svgWrapper svg {
+      max-width: 95%;
+      max-height: 95%;
+      width: 100%;
+      height: 100%;
     }
 
     /* Панель инструментов */
@@ -164,7 +175,6 @@
       overflow-x: auto;
       border-top: 1px solid var(--border-color);
       z-index: 10;
-      transition: background-color 0.3s;
     }
 
     .color-btn {
@@ -183,18 +193,15 @@
       box-shadow: 0 0 12px var(--glow-color);
     }
 
-    .tool-icon-btn {
-      background: transparent;
-      border: 2px solid var(--border-color);
+    .tool-btn {
+      background: var(--border-color);
+      border: none;
       color: var(--text-color);
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 13px;
+      font-weight: 600;
       flex-shrink: 0;
     }
   </style>
@@ -219,14 +226,12 @@
     </div>
 
     <div id="canvasContainer">
-      <!-- Слой для закрашивания кистью -->
       <canvas id="paintCanvas"></canvas>
-      <!-- Слой с черным векторным контуром поверх кисти -->
-      <div id="svgWrapper" style="width:100%; height:100%; display:flex; justify-content:center; align-items:center;"></div>
+      <div id="svgWrapper"></div>
     </div>
 
     <div id="toolbar">
-      <button class="tool-icon-btn" id="brushSizeBtn" title="Размер кисти">✏️</button>
+      <button class="tool-btn" id="brushSizeBtn">Кисть: ср.</button>
       <div class="color-btn active" style="background: #ff003c; --glow-color: rgba(255,0,60,0.6);" data-color="#ff003c"></div>
       <div class="color-btn" style="background: #a855f7; --glow-color: rgba(168,85,247,0.6);" data-color="#a855f7"></div>
       <div class="color-btn" style="background: #3b82f6; --glow-color: rgba(59,130,246,0.6);" data-color="#3b82f6"></div>
@@ -238,24 +243,21 @@
   </div>
 
   <script>
-    // === КОЛЛЕКЦИЯ СЛОЖНЫХ АНТИСТРЕСС-КАРТИНОК ===
     const images = [
       {
         id: 'complex-mandala',
         title: 'Сложная Мандала',
-        svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" id="outlineSvg">
-          <g stroke="#000000" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#000000" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="200" cy="200" r="180"/>
             <circle cx="200" cy="200" r="150"/>
             <circle cx="200" cy="200" r="110"/>
             <circle cx="200" cy="200" r="70"/>
             <circle cx="200" cy="200" r="30"/>
-            <!-- Лучи и лепестки -->
             <path d="M200,20 L200,380"/>
             <path d="M20,200 L380,200"/>
             <path d="M73,73 L327,327"/>
             <path d="M73,327 L327,73"/>
-            <!-- Узорные лепестки по кругу -->
             <path d="M200,20 C230,70 230,110 200,110 C170,110 170,70 200,20 Z"/>
             <path d="M200,380 C230,330 230,290 200,290 C170,290 170,330 200,380 Z"/>
             <path d="M20,200 C70,230 110,230 110,200 C110,170 70,170 20,200 Z"/>
@@ -270,8 +272,8 @@
       {
         id: 'floral-zen',
         title: 'Цветочный Дзен',
-        svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" id="outlineSvg">
-          <g stroke="#000000" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#000000" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
             <rect x="40" y="40" width="320" height="320" rx="40"/>
             <circle cx="200" cy="200" r="140"/>
             <path d="M200,60 C250,120 250,280 200,340 C150,280 150,120 200,60 Z"/>
@@ -283,10 +285,9 @@
       }
     ];
 
-    // === СОСТОЯНИЕ ПРИЛОЖЕНИЯ ===
     let currentColor = '#ff003c';
     let currentImageId = null;
-    let baseLineWidth = 12; // Толщина кисти для закрашивания
+    let baseLineWidth = 14;
     let isDrawing = false;
     let lastX = 0;
     let lastY = 0;
@@ -314,7 +315,6 @@
       galleryGrid.appendChild(card);
     });
 
-    // Настройка холста под Retina / iPad
     function resizeCanvas() {
       const container = document.getElementById('canvasContainer');
       if (!container || !coloringScreen.classList.contains('active')) return;
@@ -322,7 +322,6 @@
       const rect = container.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       
-      // Сохраняем текущий рисунок перед ресайзом
       let tempCanvas = document.createElement('canvas');
       tempCanvas.width = canvas.width;
       tempCanvas.height = canvas.height;
@@ -336,12 +335,10 @@
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
-      // Возвращаем рисунок обратно
       ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width / dpr, tempCanvas.height / dpr);
     }
     window.addEventListener('resize', resizeCanvas);
 
-    // Открытие картинки
     function openImage(id) {
       currentImageId = id;
       const imgData = images.find(i => i.id === id);
@@ -356,7 +353,6 @@
       }, 50);
     }
 
-    // Рисование кистью (с поддержкой Apple Pencil pressure)
     function getCoords(e) {
       const rect = canvas.getBoundingClientRect();
       return {
@@ -390,12 +386,7 @@
       ctx.moveTo(lastX, lastY);
       ctx.lineTo(coords.x, coords.y);
 
-      if (currentColor === '#ffffff' && document.documentElement.getAttribute('data-theme') === 'light') {
-        ctx.strokeStyle = '#ffffff'; // ластик под светлую тему
-      } else {
-        ctx.strokeStyle = currentColor;
-      }
-
+      ctx.strokeStyle = currentColor;
       ctx.lineWidth = baseLineWidth * (pressure * 2);
       ctx.stroke();
 
@@ -413,7 +404,6 @@
     canvas.addEventListener('pointerout', stopDrawing);
     canvas.addEventListener('pointercancel', stopDrawing);
 
-    // Сохранение и загрузка прогресса в LocalStorage
     function saveProgress() {
       if (!currentImageId) return;
       const dataURL = canvas.toDataURL();
@@ -434,7 +424,6 @@
       }
     }
 
-    // Кнопки управления
     document.getElementById('backBtn').addEventListener('click', () => {
       coloringScreen.classList.remove('active');
       galleryScreen.classList.add('active');
@@ -448,21 +437,19 @@
       }
     });
 
-    // Смена размера кисти
     document.getElementById('brushSizeBtn').addEventListener('click', () => {
-      if (baseLineWidth === 12) {
-        baseLineWidth = 24;
-        document.getElementById('brushSizeBtn').textContent = '🖌️';
-      } else if (baseLineWidth === 24) {
-        baseLineWidth = 6;
-        document.getElementById('brushSizeBtn').textContent = '✏️ (тонкая)';
+      if (baseLineWidth === 14) {
+        baseLineWidth = 28;
+        document.getElementById('brushSizeBtn').textContent = 'Кисть: толстая';
+      } else if (baseLineWidth === 28) {
+        baseLineWidth = 7;
+        document.getElementById('brushSizeBtn').textContent = 'Кисть: тонкая';
       } else {
-        baseLineWidth = 12;
-        document.getElementById('brushSizeBtn').textContent = '✏️';
+        baseLineWidth = 14;
+        document.getElementById('brushSizeBtn').textContent = 'Кисть: ср.';
       }
     });
 
-    // Выбор цвета палитры
     document.querySelectorAll('.color-btn').forEach(btn => {
       btn.addEventListener('pointerdown', (e) => {
         document.querySelector('.color-btn.active').classList.remove('active');
@@ -471,7 +458,6 @@
       });
     });
 
-    // Переключение тем (Светлая / Тёмная)
     document.querySelectorAll('.themeToggleBtn').forEach(btn => {
       btn.addEventListener('click', () => {
         const currentTheme = document.documentElement.getAttribute('data-theme');
