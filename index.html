@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <!-- Блокируем масштабирование пользователем для нативного поведения -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="manifest" href="manifest.json">
+  <title>Раскраска</title>
+  <style>
+    :root {
+      --bg-color: #121212;
+      --panel-bg: #1e1e1e;
+    }
+    
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
+      /* Отключаем системные жесты вроде pull-to-refresh */
+      overscroll-behavior: none; 
+      touch-action: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #toolbar {
+      background-color: var(--panel-bg);
+      padding: 15px;
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 10;
+    }
+
+    .color-btn {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .color-btn.active {
+      transform: scale(1.2);
+      border-color: #fff;
+    }
+
+    #clearBtn {
+      padding: 8px 16px;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-left: auto;
+    }
+
+    /* Холст занимает всё оставшееся место */
+    #canvasContainer {
+      flex: 1;
+      position: relative;
+      background: #ffffff; /* Белый фон для раскраски */
+      /* Добавь сюда фоновое изображение (шаблон раскраски), если нужно: */
+      /* background-image: url('template.png'); */
+      /* background-size: contain; */
+      /* background-position: center; */
+      /* background-repeat: no-repeat; */
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      touch-action: none; /* Критически важно для Apple Pencil */
+    }
+  </style>
+</head>
+<body>
+
+  <div id="toolbar">
+    <div class="color-btn active" style="background: #000000;" data-color="#000000"></div>
+    <div class="color-btn" style="background: #ef4444;" data-color="#ef4444"></div>
+    <div class="color-btn" style="background: #3b82f6;" data-color="#3b82f6"></div>
+    <div class="color-btn" style="background: #10b981;" data-color="#10b981"></div>
+    <div class="color-btn" style="background: #f59e0b;" data-color="#f59e0b"></div>
+    <div class="color-btn" style="background: #8b5cf6;" data-color="#8b5cf6"></div>
+    <div class="color-btn" style="background: #ffffff; border: 1px solid #ccc;" data-color="#ffffff" title="Ластик"></div>
+    <button id="clearBtn">Очистить</button>
+  </div>
+
+  <div id="canvasContainer">
+    <canvas id="paintCanvas"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('paintCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    let isDrawing = false;
+    let currentColor = '#000000';
+    let baseLineWidth = 5; // Базовая толщина кисти
+    let lastX = 0;
+    let lastY = 0;
+
+    // Настройка холста под экраны с высоким DPI (Retina/iPad)
+    function resizeCanvas() {
+      const container = document.getElementById('canvasContainer');
+      const rect = container.getBoundingClientRect();
+      
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      
+      ctx.scale(dpr, dpr);
+      
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Выбор цвета
+    document.querySelectorAll('.color-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelector('.color-btn.active').classList.remove('active');
+        e.target.classList.add('active');
+        currentColor = e.target.dataset.color;
+      });
+    });
+
+    // Очистка холста
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    // Получение точных координат
+    function getCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    }
+
+    // Pointer Events - поддерживают мышь, пальцы и Apple Pencil
+    canvas.addEventListener('pointerdown', (e) => {
+      isDrawing = true;
+      const coords = getCoords(e);
+      lastX = coords.x;
+      lastY = coords.y;
+      
+      // Рисуем точку при касании
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, baseLineWidth / 2, 0, Math.PI * 2);
+      ctx.fillStyle = currentColor;
+      ctx.fill();
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!isDrawing) return;
+      e.preventDefault();
+
+      const coords = getCoords(e);
+      
+      // Считываем силу нажатия (pressure). 
+      // Если устройство не поддерживает (например, мышь), будет 0.5.
+      let pressure = e.pressure;
+      if (pressure === 0 || pressure === undefined) pressure = 0.5;
+
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(coords.x, coords.y);
+      
+      ctx.strokeStyle = currentColor;
+      // Меняем толщину линии в зависимости от силы нажатия
+      ctx.lineWidth = baseLineWidth * (pressure * 2.5);
+      ctx.stroke();
+
+      lastX = coords.x;
+      lastY = coords.y;
+    });
+
+    const stopDrawing = () => { isDrawing = false; };
+    canvas.addEventListener('pointerup', stopDrawing);
+    canvas.addEventListener('pointerout', stopDrawing);
+    canvas.addEventListener('pointercancel', stopDrawing);
+
+  </script>
+</body>
+</html>
